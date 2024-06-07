@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sensoren von mobilen Geräten auslesen</title>
+    <style>
+        body {
+            font-size: 2em;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Sensoren von mobilen Geräten auslesen</h1>
+    <p>alpha: <span id="datenAlpha"></span></p>
+    <p>beta: <span id="datenBeta"></span></p>
+    <p>gamma: <span id="datenGamma"></span></p>
+
+    <script>
+        var ws = new WebSocket('wss://10.110.48.111:3001');
+
+        ws.addEventListener('open', function (event) {
+            console.log('connected to ws');
+        });
+
+        ws.addEventListener('message', function (event) {
+            console.log('received message from server:', event.data);
+        });
+
+        function ausrichtungAuslesen(ereignis) {
+            var winkelAlpha = Math.round(ereignis.alpha * 100) / 100;
+            var winkelBeta = Math.round(ereignis.beta * 100) / 100;
+            var winkelGamma = Math.round(ereignis.gamma * 100) / 100;
+            document.getElementById('datenAlpha').innerHTML = winkelAlpha;
+            document.getElementById('datenBeta').innerHTML = winkelBeta;
+            document.getElementById('datenGamma').innerHTML = winkelGamma;
+
+            // Send only alpha rotation data to the server
+            var rotationData = {
+                beta: winkelBeta
+            };
+            ws.send(JSON.stringify(rotationData));
+        }
+
+        window.onload = function () {
+            window.addEventListener("deviceorientation", ausrichtungAuslesen, false);
+        };
+    </script>
+</body>
+
+</html>
