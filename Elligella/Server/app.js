@@ -6,6 +6,7 @@ const logger = require('morgan');
 const https = require('https');
 const WebSocket = require('ws');
 const fs = require('fs');
+const { MongoClient } = require('mongodb');
 
 const indexRouter = require('./routes/index');
 const usersRouter = require('./routes/users');
@@ -25,77 +26,83 @@ app.use('/', indexRouter);
 app.use('/users', usersRouter);
 
 const options = {
-    key: fs.readFileSync('.\\cerificates\\server.key'),
-    cert: fs.readFileSync('.\\cerificates\\server.crt')
+    key: fs.readFileSync('./cerificates/server.key'),
+    cert: fs.readFileSync('./cerificates/server.crt')
 };
 
-var storedMessage = '{"type":"Buffer","data":[123,34,97,108,112,104,97,34,58,49,46,51,125]}';
- 
 const server = https.createServer(options, app);
 const wss = new WebSocket.Server({ server });
 
-wss.on('connection', function connection(ws) {
-    console.log('A new client connected');
+let db; // MongoDB client instance
 
-    ws.on('message', function incoming(message) {
-        console.log('Received from first client: %s', message);
-        
-        storedMessage = message; // Update storedMessage here
-        wss.clients.forEach(function each(client) {
-            if (client !== ws && client.readyState === WebSocket.OPEN) {
-                client.send(message);
-            }
+// MongoDB connection URI with username and password
+const mongoURI = "mongodb://mongoadmin:mysecret@10.115.2.18:8017/";
+
+// Connect to MongoDB
+async function connectToMongoDB() {
+    try {
+        const client = new MongoClient(mongoURI, { useNewUrlParser: true, useUnifiedTopology: true });
+        await client.connect();
+        console.log('Connected to MongoDB');
+        db = client.db('position'); // Use or create 'position' database
+
+        // WebSocket server setup
+        wss.on('connection', function connection(ws) {
+            console.log('A new client connected');
+
+            ws.on('message', async function incoming(message) {
+                console.log('Received from client:', message);
+
+                try {
+                    // Convert Buffer to UTF-8 string
+                    const messageString = message.toString('utf8');
+                    console.log('Received message as string:', messageString);
+
+                    // Parse the string as JSON
+                    const data = JSON.parse(messageString);
+
+                    // Replace the existing document or insert a new one
+                    const collection = db.collection('sensor_data');
+                    await collection.updateOne({}, { $set: data }, { upsert: true });
+                    console.log('Sensor data saved to MongoDB');
+                } catch (err) {
+                    console.error('Error parsing or saving sensor data:', err);
+                }
+
+                // Broadcast message to all clients
+                wss.clients.forEach(function each(client) {
+                    if (client !== ws && client.readyState === WebSocket.OPEN) {
+                        client.send(messageString); // Send the original message back as JSON string
+                    }
+                });
+            });
+
+            ws.on('close', function () {
+                console.log('Client disconnected');
+            });
         });
-    });
 
-    ws.on('close', function () {
-        console.log('Client disconnected');
-    });
-});
-
-server.listen(3001, () => {
-    console.log('WebSocket server listening on port 3001');
-    // Call sendStoragedMessage every 1 second
-    setInterval(sendStoragedMessage, 1);
-});
-
-const wss2 = new WebSocket.Server({ port: 8080 });
-
-wss2.on('connection', function connection(ws) {
-    console.log('New client connected to second WebSocket');
-
-
-
-
-    ws.on('message', function incoming(message) {
-        console.log('Received from second client: %s', message);
-        // Broadcast the received message to all clients connected to wss2
-        wss2.clients.forEach(function each(client) {
-            if (client !== ws && client.readyState === WebSocket.OPEN) {
-                client.send(message);
-            }
+        server.listen(3001, () => {
+            console.log('WebSocket server listening on port 3001');
         });
-    });
 
-    ws.on('close', function close() {
-        console.log('Connection closed for second client');
-    });
-});
-
-function sendStoragedMessage() {
-    const messageString = JSON.stringify(storedMessage); // Convert storedMessage to a string
-    wss2.clients.forEach(function each(client) {
-        if (client.readyState === WebSocket.OPEN) {
-            client.send(messageString); // Send the stringified message
-        }
-    });
+    } catch (err) {
+        console.error('Error connecting to MongoDB:', err);
+        process.exit(1); // Exit the process on connection error
+    }
 }
 
-app.use(function(req, res, next) {
+// Initialize MongoDB connection
+connectToMongoDB().catch(err => {
+    console.error('MongoDB connection initialization error:', err);
+    process.exit(1); // Exit the process on connection error
+});
+
+app.use(function (req, res, next) {
     next(createError(404));
 });
 
-app.use(function(err, req, res, next) {
+app.use(function (err, req, res, next) {
     res.locals.message = err.message;
     res.locals.error = req.app.get('env') === 'development' ? err : {};
     res.status(err.status || 500);

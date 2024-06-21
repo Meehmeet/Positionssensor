@@ -4,49 +4,87 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sensoren von mobilen Geräten auslesen</title>
+    <title>Mobile Sensor Data</title>
     <style>
         body {
-            font-size: 2em;
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 20px;
+            text-align: center;
+        }
+
+        h1 {
+            color: #333;
+        }
+
+        .sensor-data {
+            margin: 20px 0;
+            font-size: 1.5em;
+            color: #666;
+        }
+
+        .sensor-data span {
+            font-weight: bold;
+            color: #000;
+        }
+
+        .status {
+            margin: 20px 0;
+            font-size: 1.2em;
+            color: #888;
         }
     </style>
 </head>
 
 <body>
-    <h1>Sensoren von mobilen Geräten auslesen</h1>
-    <p>alpha: <span id="datenAlpha"></span></p>
-    <p>beta: <span id="datenBeta"></span></p>
-    <p>gamma: <span id="datenGamma"></span></p>
+    <h1>Mobile Sensor Data</h1>
+    <div class="sensor-data">Alpha: <span id="alpha">N/A</span></div>
+    <div class="sensor-data">Beta: <span id="beta">N/A</span></div>
+    <div class="sensor-data">Gamma: <span id="gamma">N/A</span></div>
+    <div class="status" id="status">Connecting to WebSocket...</div>
 
     <script>
-        var ws = new WebSocket('wss://10.110.48.111:3001');
+        const ws = new WebSocket('wss://10.110.48.117:3001'); // Update this with your WebSocket server URL
 
-        ws.addEventListener('open', function (event) {
-            console.log('connected to ws');
-        });
+        ws.onopen = function () {
+            document.getElementById('status').textContent = 'Connected to WebSocket.';
+            console.log('Connected to WebSocket.');
+        };
 
-        ws.addEventListener('message', function (event) {
-            console.log('received message from server:', event.data);
-        });
+        ws.onmessage = function (event) {
+            console.log('Message from server:', event.data);
+        };
 
-        function ausrichtungAuslesen(ereignis) {
-            var winkelAlpha = Math.round(ereignis.alpha * 100) / 100;
-            var winkelBeta = Math.round(ereignis.beta * 100) / 100;
-            var winkelGamma = Math.round(ereignis.gamma * 100) / 100;
-            document.getElementById('datenAlpha').innerHTML = winkelAlpha;
-            document.getElementById('datenBeta').innerHTML = winkelBeta;
-            document.getElementById('datenGamma').innerHTML = winkelGamma;
+        ws.onerror = function (error) {
+            document.getElementById('status').textContent = 'WebSocket error.';
+            console.error('WebSocket error:', error);
+        };
 
-            // Send only alpha rotation data to the server
-            var rotationData = {
-                beta: winkelBeta
+        ws.onclose = function () {
+            document.getElementById('status').textContent = 'WebSocket connection closed.';
+            console.log('WebSocket connection closed.');
+        };
+
+        function handleOrientation(event) {
+            const alpha = Math.round(event.alpha * 100) / 100;
+            const beta = Math.round(event.beta * 100) / 100;
+            const gamma = Math.round(event.gamma * 100) / 100;
+
+            document.getElementById('alpha').textContent = alpha;
+            document.getElementById('beta').textContent = beta;
+            document.getElementById('gamma').textContent = gamma;
+
+            const sensorData = {
+                alpha: alpha,
+                beta: beta,
+                gamma: gamma
             };
-            ws.send(JSON.stringify(rotationData));
+
+            ws.send(JSON.stringify(sensorData));
         }
 
-        window.onload = function () {
-            window.addEventListener("deviceorientation", ausrichtungAuslesen, false);
-        };
+        window.addEventListener('deviceorientation', handleOrientation);
     </script>
 </body>
 
